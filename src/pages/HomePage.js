@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { Container, Typography, Box, IconButton } from '@mui/material';
 import MicIcon from '@mui/icons-material/Mic';
 import MicOffIcon from '@mui/icons-material/MicOff';
+import ClearIcon from '@mui/icons-material/Clear';
 import { useNavigate } from 'react-router-dom';
 import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
 
@@ -21,6 +22,7 @@ const HomePage = () => {
     const path = routes[page.toLowerCase().trim()];
     if (path) {
       navigate(path);
+      resetTranscript();
     }
   };
 
@@ -31,7 +33,7 @@ const HomePage = () => {
     },
   ];
 
-  const { transcript, listening, browserSupportsSpeechRecognition } = useSpeechRecognition({ commands });
+  const { transcript, listening, browserSupportsSpeechRecognition, resetTranscript } = useSpeechRecognition({ commands });
 
   useEffect(() => {
     SpeechRecognition.startListening({ continuous: true });
@@ -56,7 +58,7 @@ const HomePage = () => {
       <Typography variant="h2" component="h1" gutterBottom>
         How can I help you?
       </Typography>
-      <Box sx={{ my: 4 }}>
+      <Box sx={{ my: 4, display: 'flex', alignItems: 'center', gap: 2 }}>
         <IconButton
           color="primary"
           aria-label="toggle microphone"
@@ -75,6 +77,9 @@ const HomePage = () => {
           }}
         >
           {listening ? <MicIcon sx={{ fontSize: 60 }} /> : <MicOffIcon sx={{ fontSize: 60 }} />}
+        </IconButton>
+        <IconButton aria-label="clear transcript" onClick={resetTranscript} disabled={!transcript}>
+          <ClearIcon sx={{ fontSize: 40 }} />
         </IconButton>
       </Box>
       <Typography variant="h5" color="text.secondary">
