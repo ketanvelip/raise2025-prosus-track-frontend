@@ -1,8 +1,8 @@
 import React from 'react';
-import { Container, Typography, Grid, Card, CardActionArea, CardContent, CardMedia, TextField, Box, CircularProgress } from '@mui/material';
+import { Container, Typography, Grid, Card, CardActionArea, CardContent, CardMedia, TextField, Box, Button } from '@mui/material';
+import { useOptions } from '../context/OptionsContext';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { useState, useEffect } from 'react';
 
 const restaurants = [
   { id: 'pizza-palace', name: 'Pizza Palace', cuisine: 'Italian', image: 'https://via.placeholder.com/300' },
@@ -32,14 +32,8 @@ const itemVariants = {
 };
 
 const FoodOrderingPage = () => {
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setLoading(false);
-    }, 1500); // Simulate a 1.5-second load time
-    return () => clearTimeout(timer);
-  }, []);
+  const { options, clearOptions } = useOptions();
+  const displayItems = options && options.category === 'food' ? options.options : restaurants;
 
   return (
     <Container sx={{ py: 4 }}>
@@ -49,43 +43,38 @@ const FoodOrderingPage = () => {
       <Box sx={{ display: 'flex', justifyContent: 'center', mb: 4 }}>
         <TextField label="Search Restaurants" variant="outlined" sx={{ width: '50%' }} />
       </Box>
-            {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}>
-          <CircularProgress />
-        </Box>
-      ) : (
-        <Grid
-          component={motion.div}
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-          container
-          spacing={4}
-        >
-          {restaurants.map((restaurant) => (
-            <Grid item component={motion.div} variants={itemVariants} key={restaurant.id} xs={12} sm={6} md={4}>
-              <CardActionArea component={Link} to={`/food/${restaurant.id}`} sx={{ height: '100%', textDecoration: 'none' }}>
-                <Card sx={{ height: '100%' }}>
-                  <CardMedia
-                    component="img"
-                    height="140"
-                    image={restaurant.image}
-                    alt={restaurant.name}
-                  />
-                  <CardContent>
-                    <Typography gutterBottom variant="h5" component="h2">
-                      {restaurant.name}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {restaurant.cuisine}
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </CardActionArea>
-            </Grid>
-          ))}
-        </Grid>
-      )}
+      {options && options.category === 'food' && <Button onClick={clearOptions} sx={{ mb: 2 }}>Clear Search & Show All</Button>}
+      <Grid
+        component={motion.div}
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+        container
+        spacing={4}
+      >
+        {displayItems.map((item) => (
+          <Grid item component={motion.div} variants={itemVariants} key={item.id || item.item_name} xs={12} sm={6} md={4}>
+            <CardActionArea component={Link} to={`/food/${item.id || item.item_name}`} sx={{ height: '100%', textDecoration: 'none' }}>
+              <Card sx={{ height: '100%' }}>
+                <CardMedia
+                  component="img"
+                  height="140"
+                  image={item.image || item.item_img_url}
+                  alt={item.name || item.item_name}
+                />
+                <CardContent>
+                  <Typography gutterBottom variant="h5" component="h2">
+                    {item.name || item.item_name}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {item.cuisine || item.item_cuisine}
+                  </Typography>
+                </CardContent>
+              </Card>
+            </CardActionArea>
+          </Grid>
+        ))}
+      </Grid>
     </Container>
   );
 };

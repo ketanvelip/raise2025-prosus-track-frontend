@@ -1,28 +1,41 @@
-import React, { createContext, useState, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext } from 'react';
+import Cookies from 'js-cookie';
 
-const UserContext = createContext();
+export const UserContext = createContext();
 
 export const useUser = () => useContext(UserContext);
 
 export const UserProvider = ({ children }) => {
-  const [user, setUser] = useState({
-    name: 'Alex Doe',
-    email: 'alex.doe@example.com',
-    avatar: '/static/images/avatar/1.jpg',
-    walletBalance: 150.75,
-  });
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const userEmail = Cookies.get('userEmail');
+    if (userEmail) {
+      setUser({ email: userEmail, walletBalance: 1500 }); // Mock wallet balance
+    }
+    setLoading(false);
+  }, []);
+
+  const login = (email) => {
+    Cookies.set('userEmail', email, { expires: 7 });
+    setUser({ email, walletBalance: 1500 });
+  };
+
+  const logout = () => {
+    Cookies.remove('userEmail');
+    setUser(null);
+  };
 
   const updateWalletBalance = (amount) => {
-    setUser((prevUser) => ({
-      ...prevUser,
-      walletBalance: prevUser.walletBalance - amount,
-    }));
+    if (user) {
+      setUser((prevUser) => ({ ...prevUser, walletBalance: prevUser.walletBalance - amount }));
+    }
   };
 
-  const value = {
-    user,
-    updateWalletBalance,
-  };
-
-  return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
+  return (
+    <UserContext.Provider value={{ user, loading, login, logout, updateWalletBalance }}>
+      {children}
+    </UserContext.Provider>
+  );
 };

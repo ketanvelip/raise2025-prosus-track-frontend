@@ -1,50 +1,89 @@
-import React, { useEffect } from 'react';
-import { Container, Typography, Box, IconButton } from '@mui/material';
+import React, { useContext, useEffect, useRef } from 'react';
+import { Container, Typography, Box, IconButton, CircularProgress, Alert } from '@mui/material';
 import MicIcon from '@mui/icons-material/Mic';
-import MicOffIcon from '@mui/icons-material/MicOff';
-import ClearIcon from '@mui/icons-material/Clear';
-import { useNavigate } from 'react-router-dom';
 import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
+import { useOptions } from '../context/OptionsContext';
+import { UserContext } from '../context/UserContext';
+import { useNavigate } from 'react-router-dom';
 
 const HomePage = () => {
+  const { user } = useContext(UserContext);
+  const { options, loading, error, fetchOptions, clearOptions } = useOptions();
+  const { transcript, listening, resetTranscript, browserSupportsSpeechRecognition } = useSpeechRecognition();
+  const submittedRef = useRef(false);
   const navigate = useNavigate();
 
-  const navigateTo = (page) => {
-    const routes = {
-      'food': '/food',
-      'market': '/market',
-      'marketplace': '/market',
-      'profile': '/profile',
-      'cart': '/cart',
-      'orders': '/profile/orders',
-      'home': '/',
-    };
-    const path = routes[page.toLowerCase().trim()];
-    if (path) {
+  useEffect(() => {
+    if (options) {
+      const path = `/${options.category}`;
       navigate(path);
+    }
+  }, [options, navigate]);
+
+  
+
+  const handleMicClick = () => {
+    if (listening) {
+      SpeechRecognition.stopListening();
+    } else {
+      submittedRef.current = false; // Reset the flag when starting a new recognition
       resetTranscript();
+      clearOptions();
+      SpeechRecognition.startListening({ continuous: true });
     }
   };
 
-  const commands = [
-    {
-      command: ['Go to *', 'Open *'],
-      callback: (page) => navigateTo(page),
-    },
-  ];
-
-  const { transcript, listening, browserSupportsSpeechRecognition, resetTranscript } = useSpeechRecognition({ commands });
-
   useEffect(() => {
-    SpeechRecognition.startListening({ continuous: true });
-    return () => {
-      SpeechRecognition.stopListening();
-    };
-  }, []);
+    if (!listening && transcript && !submittedRef.current) {
+      submittedRef.current = true;
+      if (user?.email) {
+        fetchOptions(user.email, transcript);
+      } else {
+        console.error('Could not submit voice command: user email not found.');
+      }
+    }
+  }, [listening, transcript, user, fetchOptions]);
 
   if (!browserSupportsSpeechRecognition) {
-    return <Container><Typography>Your browser does not support speech recognition.</Typography></Container>;
+    return <Container><Alert severity="error">Your browser does not support speech recognition.</Alert></Container>;
   }
+
+  const renderContent = () => {
+    if (loading) {
+      return <CircularProgress sx={{ mt: 4 }} />;
+    }
+    if (error) {
+      return <Alert severity="error" sx={{ mt: 4 }}>{error}</Alert>;
+    }
+    return (
+      <>
+        <Typography variant="h2" component="h1" gutterBottom>
+          How can I help you?
+        </Typography>
+        <Box sx={{ my: 4 }}>
+          <IconButton
+            color="primary"
+            aria-label={listening ? 'stop listening' : 'start listening'}
+            onClick={handleMicClick}
+            sx={{
+              width: 100,
+              height: 100,
+              border: '2px solid',
+              borderColor: listening ? 'primary.main' : 'grey.500',
+            }}
+          >
+            <MicIcon sx={{ fontSize: 60 }} />
+          </IconButton>
+        </Box>
+        <Typography variant="h5" color="text.secondary">
+          {listening ? 'Listening...' : 'Click the mic to speak'}
+        </Typography>
+        <Typography variant="body1" sx={{ mt: 2, minHeight: '24px' }}>
+          {transcript}
+        </Typography>
+      </>
+    );
+  };
 
   return (
     <Container sx={{
@@ -52,45 +91,11 @@ const HomePage = () => {
       flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      height: 'calc(100vh - 128px)', // Adjust height to fill viewport minus header/footer
+      py: 4,
+      minHeight: 'calc(100vh - 128px)',
       textAlign: 'center'
     }}>
-      <Typography variant="h2" component="h1" gutterBottom>
-        How can I help you?
-      </Typography>
-      <Box sx={{ my: 4, display: 'flex', alignItems: 'center', gap: 2 }}>
-        <IconButton
-          color="primary"
-          aria-label="toggle microphone"
-          onClick={() => {
-            if (listening) {
-              SpeechRecognition.stopListening();
-            } else {
-              SpeechRecognition.startListening({ continuous: true });
-            }
-          }}
-          sx={{
-            width: 100,
-            height: 100,
-            border: '2px solid',
-            borderColor: listening ? 'primary.main' : 'grey.500',
-          }}
-        >
-          {listening ? <MicIcon sx={{ fontSize: 60 }} /> : <MicOffIcon sx={{ fontSize: 60 }} />}
-        </IconButton>
-        <IconButton aria-label="clear transcript" onClick={resetTranscript} disabled={!transcript}>
-          <ClearIcon sx={{ fontSize: 40 }} />
-        </IconButton>
-      </Box>
-      <Typography variant="h5" color="text.secondary">
-        {listening ? "Listening..." : "Click the mic to start"}
-      </Typography>
-      <Typography variant="body1" sx={{ mt: 2, minHeight: '24px' }}>
-        {transcript}
-      </Typography>
-      <Typography variant="caption" color="text.secondary" sx={{ mt: 4 }}>
-        Try saying: "Go to Food", "Open Market", or "Show my Cart"
-      </Typography>
+      {renderContent()}
     </Container>
   );
 };
