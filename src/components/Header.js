@@ -42,6 +42,11 @@ const Header = () => {
         <Button color="inherit" component={Link} to="/food">Food</Button>
         {/* <Button color="inherit" component={Link} to="/travel">Travel</Button> */}
         <Button color="inherit" component={Link} to="/market">Market</Button>
+        <IconButton color="inherit" component={Link} to="/cart">
+          <Badge badgeContent={totalItems} color="secondary">
+            <ShoppingCartIcon />
+          </Badge>
+        </IconButton>
         {user ? (
             <div>
               <IconButton
@@ -79,11 +84,6 @@ const Header = () => {
               Login
             </Button>
           )}
-        <IconButton color="inherit" component={Link} to="/cart">
-          <Badge badgeContent={totalItems} color="secondary">
-            <ShoppingCartIcon />
-          </Badge>
-        </IconButton>
       </Toolbar>
     </AppBar>
   );

@@ -1,5 +1,7 @@
 import React, { useContext, useEffect, useRef } from 'react';
 import { Container, Typography, Box, IconButton, CircularProgress, Alert } from '@mui/material';
+import { motion } from 'framer-motion';
+import CloseIcon from '@mui/icons-material/Close';
 import MicIcon from '@mui/icons-material/Mic';
 import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
 import { useOptions } from '../context/OptionsContext';
@@ -49,6 +51,31 @@ const HomePage = () => {
   }
 
   const renderContent = () => {
+    if (listening) {
+      return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+          <motion.div
+            animate={{
+              scale: [1, 1.2, 1],
+              opacity: [0.7, 1, 0.7],
+            }}
+            transition={{
+              duration: 1.5,
+              ease: "easeInOut",
+              repeat: Infinity,
+            }}
+          >
+            <MicIcon sx={{ fontSize: 150, color: 'primary.main' }} />
+          </motion.div>
+          <Typography variant="h5" sx={{ mt: 2 }}>Listening...</Typography>
+          <Typography variant="body1" sx={{ mt: 2, minHeight: '24px' }}>{transcript}</Typography>
+          <IconButton onClick={handleMicClick} sx={{ mt: 4 }}>
+            <CloseIcon sx={{ fontSize: 40 }}/>
+          </IconButton>
+        </Box>
+      );
+    }
+
     if (loading) {
       return <CircularProgress sx={{ mt: 4 }} />;
     }
@@ -57,26 +84,26 @@ const HomePage = () => {
     }
     return (
       <>
-        <Typography variant="h2" component="h1" gutterBottom>
+                <Typography variant="h2" component="h1" gutterBottom>
           How can I help you?
         </Typography>
-        <Box sx={{ my: 4 }}>
+                <Box sx={{ my: 4 }}>
           <IconButton
             color="primary"
-            aria-label={listening ? 'stop listening' : 'start listening'}
+            aria-label={'start listening'}
             onClick={handleMicClick}
             sx={{
               width: 100,
               height: 100,
               border: '2px solid',
-              borderColor: listening ? 'primary.main' : 'grey.500',
+              borderColor: 'grey.500',
             }}
           >
             <MicIcon sx={{ fontSize: 60 }} />
           </IconButton>
         </Box>
-        <Typography variant="h5" color="text.secondary">
-          {listening ? 'Listening...' : 'Click the mic to speak'}
+                <Typography variant="h5" color="text.secondary">
+          {'Click the mic to speak'}
         </Typography>
         <Typography variant="body1" sx={{ mt: 2, minHeight: '24px' }}>
           {transcript}
