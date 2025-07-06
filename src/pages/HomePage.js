@@ -1,84 +1,91 @@
-import React from 'react';
-import { Container, Typography, Grid, Card, CardActionArea, CardContent } from '@mui/material';
-import { motion } from 'framer-motion';
-import { Link } from 'react-router-dom';
-import { CircularProgress, Box } from '@mui/material';
-import { useState, useEffect } from 'react';
-
-const services = [
-  { name: 'Food Ordering', path: '/food', description: 'Order from your favorite restaurants.' },
-  { name: 'Travel Booking', path: '/travel', description: 'Plan your next adventure.' },
-  { name: 'Product Marketplace', path: '/market', description: 'Buy and sell new and used items.' },
-];
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.2,
-    },
-  },
-};
-
-const itemVariants = {
-  hidden: { y: 20, opacity: 0 },
-  visible: {
-    y: 0,
-    opacity: 1,
-  },
-};
+import React, { useEffect } from 'react';
+import { Container, Typography, Box, IconButton } from '@mui/material';
+import MicIcon from '@mui/icons-material/Mic';
+import MicOffIcon from '@mui/icons-material/MicOff';
+import { useNavigate } from 'react-router-dom';
+import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
 
 const HomePage = () => {
-  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+
+  const navigateTo = (page) => {
+    const routes = {
+      'food': '/food',
+      'market': '/market',
+      'marketplace': '/market',
+      'profile': '/profile',
+      'cart': '/cart',
+      'orders': '/profile/orders',
+      'home': '/',
+    };
+    const path = routes[page.toLowerCase().trim()];
+    if (path) {
+      navigate(path);
+    }
+  };
+
+  const commands = [
+    {
+      command: ['Go to *', 'Open *'],
+      callback: (page) => navigateTo(page),
+    },
+  ];
+
+  const { transcript, listening, browserSupportsSpeechRecognition } = useSpeechRecognition({ commands });
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setLoading(false);
-    }, 1500); // Simulate a 1.5-second load time
-    return () => clearTimeout(timer);
+    SpeechRecognition.startListening({ continuous: true });
+    return () => {
+      SpeechRecognition.stopListening();
+    };
   }, []);
 
+  if (!browserSupportsSpeechRecognition) {
+    return <Container><Typography>Your browser does not support speech recognition.</Typography></Container>;
+  }
+
   return (
-    <Container sx={{ py: 4 }}>
-      <Typography variant="h2" component="h1" gutterBottom align="center">
-        Welcome to the Future of E-Commerce
+    <Container sx={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      height: 'calc(100vh - 128px)', // Adjust height to fill viewport minus header/footer
+      textAlign: 'center'
+    }}>
+      <Typography variant="h2" component="h1" gutterBottom>
+        How can I help you?
       </Typography>
-      <Typography variant="h5" component="h2" color="text.secondary" gutterBottom align="center">
-        Your AI-powered assistant for everything you need.
-      </Typography>
-            {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}>
-          <CircularProgress />
-        </Box>
-      ) : (
-        <Grid
-          component={motion.div}
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-          container
-          spacing={4}
-          sx={{ mt: 4 }}
+      <Box sx={{ my: 4 }}>
+        <IconButton
+          color="primary"
+          aria-label="toggle microphone"
+          onClick={() => {
+            if (listening) {
+              SpeechRecognition.stopListening();
+            } else {
+              SpeechRecognition.startListening({ continuous: true });
+            }
+          }}
+          sx={{
+            width: 100,
+            height: 100,
+            border: '2px solid',
+            borderColor: listening ? 'primary.main' : 'grey.500',
+          }}
         >
-          {services.filter(service => service.path !== '/travel').map((service) => (
-            <Grid item component={motion.div} variants={itemVariants} key={service.name} xs={12} sm={6} md={4}>
-              <CardActionArea component={Link} to={service.path}>
-                <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                  <CardContent sx={{ flexGrow: 1 }}>
-                    <Typography gutterBottom variant="h5" component="h2">
-                      {service.name}
-                    </Typography>
-                    <Typography>
-                      {service.description}
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </CardActionArea>
-            </Grid>
-          ))}
-        </Grid>
-      )}
+          {listening ? <MicIcon sx={{ fontSize: 60 }} /> : <MicOffIcon sx={{ fontSize: 60 }} />}
+        </IconButton>
+      </Box>
+      <Typography variant="h5" color="text.secondary">
+        {listening ? "Listening..." : "Click the mic to start"}
+      </Typography>
+      <Typography variant="body1" sx={{ mt: 2, minHeight: '24px' }}>
+        {transcript}
+      </Typography>
+      <Typography variant="caption" color="text.secondary" sx={{ mt: 4 }}>
+        Try saying: "Go to Food", "Open Market", or "Show my Cart"
+      </Typography>
     </Container>
   );
 };
