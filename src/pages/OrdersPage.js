@@ -1,5 +1,5 @@
 import React from 'react';
-import { Container, Typography, Paper, Box, List, ListItem, ListItemText, Divider, Accordion, AccordionSummary, AccordionDetails } from '@mui/material';
+import { Container, Typography, List, ListItem, ListItemText, Divider, Box, Accordion, AccordionSummary, AccordionDetails } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useOrders } from '../context/OrderContext';
 
