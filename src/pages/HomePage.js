@@ -15,27 +15,46 @@ const groq = new Groq({
 
 const HomePage = ({ chatHistory, setChatHistory }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [isChatView, setIsChatView] = useState(false);
+  const [isChatView, setIsChatView] = useState(chatHistory.length > 0);
   const [isRecording, setIsRecording] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const { user } = useContext(UserContext);
-  const { options, loading, error, fetchOptions } = useOptions();
+  const { error } = useOptions();
   const navigate = useNavigate();
-  const submittedRef = useRef(false);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const silenceTimerRef = useRef(null);
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
+  const chatEndRef = useRef(null);
 
-  const handleSubmit = useCallback((query) => {
-    if (query.trim() && user?.email && !submittedRef.current) {
-      submittedRef.current = true;
-      setChatHistory(prev => [...prev, { sender: 'user', text: query }]);
-      setIsChatView(true);
-      fetchOptions(user.email, query);
-      setSearchTerm('');
+  const handleSubmit = useCallback(async (query) => {
+    if (!query.trim() || !user?.email) return;
+
+    const newChatHistory = [...chatHistory, { sender: 'user', text: query }];
+    setChatHistory(newChatHistory);
+    setIsChatView(true);
+    setSearchTerm('');
+    setIsProcessing(true);
+
+    try {
+      const completion = await groq.chat.completions.create({
+        messages: [
+          { role: 'system', content: 'You are a helpful assistant for a food ordering app called PalateIQ.' },
+          ...newChatHistory.map(msg => ({ role: msg.sender === 'user' ? 'user' : 'assistant', content: msg.text }))
+        ],
+        model: 'llama3-8b-8192',
+      });
+
+      const aiResponse = completion.choices[0]?.message?.content || 'Sorry, I had trouble understanding that.';
+      setChatHistory(prev => [...prev, { sender: 'ai', text: aiResponse }]);
+    } catch (e) {
+      console.error('Error getting completion:', e);
+      setChatHistory(prev => [...prev, { sender: 'ai', text: 'Sorry, something went wrong. Please try again.' }]);
     }
-  }, [user, fetchOptions, setChatHistory]);
+
+    setIsProcessing(false);
+  }, [user, chatHistory, setChatHistory]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
@@ -77,7 +96,10 @@ const HomePage = ({ chatHistory, setChatHistory }) => {
   }, [stopRecording]);
 
   const handleTranscription = useCallback(async () => {
-    if (audioChunksRef.current.length === 0) return;
+    if (audioChunksRef.current.length === 0) {
+      setIsProcessing(false);
+      return;
+    }
     const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
     audioChunksRef.current = [];
     const file = new File([audioBlob], 'audio.webm', { type: 'audio/webm' });
@@ -89,11 +111,13 @@ const HomePage = ({ chatHistory, setChatHistory }) => {
       });
       const transcript = transcription.text;
       if (transcript) {
-        setSearchTerm(transcript);
         handleSubmit(transcript);
+      } else {
+        setIsProcessing(false);
       }
     } catch (e) {
       console.error('Error transcribing audio:', e);
+      setIsProcessing(false);
     }
   }, [handleSubmit]);
 
@@ -112,30 +136,31 @@ const HomePage = ({ chatHistory, setChatHistory }) => {
       mediaRecorderRef.current.onstop = handleTranscription;
       mediaRecorderRef.current.start();
       setIsRecording(true);
+      setIsProcessing(true);
       requestAnimationFrame(checkForSilence);
     } catch (err) {
       console.error('Error accessing microphone:', err);
+      setIsProcessing(false);
     }
   }, [checkForSilence, handleTranscription]);
 
   useEffect(() => {
-    if (options) {
-      setChatHistory(prev => [...prev, { sender: 'ai', text: `Sure, I can help with ${options.category}. Let me show you some options.` }]);
-      setTimeout(() => navigate(`/${options.category}`), 2000);
+    if (chatHistory.length > 0) {
+      setIsChatView(true);
     }
-  }, [options, navigate, setChatHistory]);
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatHistory]);
 
   const handleMicClick = () => {
     if (isRecording) {
       stopRecording();
     } else {
-      submittedRef.current = false;
       startRecording();
     }
   };
 
   const handleTextSubmit = (event) => {
-    if (event.key === 'Enter') {
+    if (event.key === 'Enter' && !isProcessing) {
       handleSubmit(searchTerm);
     }
   };
@@ -165,17 +190,19 @@ const HomePage = ({ chatHistory, setChatHistory }) => {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 onKeyDown={handleTextSubmit}
+                disabled={isProcessing}
                 sx={{ maxWidth: 700, bgcolor: 'background.paper', borderRadius: 1 }}
                 InputProps={{
                   endAdornment: (
                     <InputAdornment position="end">
-                      <IconButton onClick={handleMicClick} edge="end" color={isRecording ? 'primary' : 'default'}>
+                      <IconButton onClick={handleMicClick} edge="end" color={isRecording ? 'primary' : 'default'} disabled={isProcessing}>
                         <MicIcon />
                       </IconButton>
                     </InputAdornment>
                   )
                 }}
               />
+              {isProcessing && <Typography variant="body1" align="center" sx={{ mt: 2 }}>Thinking...</Typography>}
             </Box>
           </motion.div>
         ) : (
@@ -184,14 +211,15 @@ const HomePage = ({ chatHistory, setChatHistory }) => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', width: '100%' }}
+            style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}
           >
             <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 2 }}>
               {chatHistory.map((msg, index) => (
                 <ChatMessage key={index} message={msg} />
               ))}
-              {loading && <ChatMessage message={{ sender: 'ai', text: 'Thinking...' }} />}
+              {isProcessing && <ChatMessage message={{ sender: 'ai', text: 'Thinking...' }} />}
               {error && <ChatMessage message={{ sender: 'ai', text: `Sorry, something went wrong: ${error}` }} />}
+              <div ref={chatEndRef} />
             </Box>
             <Paper elevation={3} sx={{ p: 2, mt: 'auto' }}>
               <TextField 
@@ -201,11 +229,12 @@ const HomePage = ({ chatHistory, setChatHistory }) => {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 onKeyDown={handleTextSubmit}
+                disabled={isProcessing}
                 sx={{ bgcolor: 'background.paper', borderRadius: 1 }}
                 InputProps={{
                   endAdornment: (
                     <InputAdornment position="end">
-                      <IconButton onClick={handleMicClick} edge="end" color={isRecording ? 'primary' : 'default'}>
+                      <IconButton onClick={handleMicClick} edge="end" color={isRecording ? 'primary' : 'default'} disabled={isProcessing}>
                         <MicIcon />
                       </IconButton>
                     </InputAdornment>
