@@ -11,6 +11,7 @@ import CartPage from './pages/CartPage';
 import MarketplacePage from './pages/MarketplacePage';
 import OrderConfirmationPage from './pages/OrderConfirmationPage';
 import OrdersPage from './pages/OrdersPage';
+import OrderDetailPage from './pages/OrderDetailPage';
 import LoginPage from './pages/LoginPage';
 import { useUser, UserContext } from './context/UserContext';
 import Notification from './components/Notification';
@@ -45,29 +46,27 @@ function App() {
       try {
         const savedConversations = localStorage.getItem(conversationsKey);
         const loadedConversations = savedConversations ? JSON.parse(savedConversations) : {};
-        setConversations(loadedConversations);
+        
+        // Always start a new conversation on login/page load for a logged-in user
+        const newId = uuidv4();
+        const newConversations = { ...loadedConversations, [newId]: [] };
+        
+        setConversations(newConversations);
+        setCurrentConversationId(newId);
 
-        const savedId = localStorage.getItem(currentIdKey);
-        const existingIds = Object.keys(loadedConversations);
+        // Persist immediately
+        localStorage.setItem(conversationsKey, JSON.stringify(newConversations));
+        localStorage.setItem(currentIdKey, newId);
 
-        if (savedId && loadedConversations[savedId]) {
-          setCurrentConversationId(savedId);
-        } else if (existingIds.length > 0) {
-          setCurrentConversationId(existingIds.sort((a, b) => b.localeCompare(a))[0]);
-        } else {
-          const newId = uuidv4();
-          const newConversations = { [newId]: [] };
-          setConversations(newConversations);
-          setCurrentConversationId(newId);
-          localStorage.setItem(conversationsKey, JSON.stringify(newConversations));
-          localStorage.setItem(currentIdKey, newId);
-        }
       } catch (error) {
         console.error('Failed to load user conversations from localStorage', error);
-        setConversations({});
-        setCurrentConversationId(null);
+        // If loading fails, start fresh
+        const newId = uuidv4();
+        setConversations({ [newId]: [] });
+        setCurrentConversationId(newId);
       }
     } else {
+      // Clear conversations if no user is logged in
       setConversations({});
       setCurrentConversationId(null);
     }
@@ -115,10 +114,11 @@ function App() {
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/food" element={<FoodOrderingPage />} />
             <Route path="/food/:restaurantId" element={<MenuPage />} />
-            <Route path="/cart" element={<CartPage />} />
             <Route path="/market" element={<MarketplacePage />} />
+            <Route path="/cart" element={<CartPage />} />
+            <Route path="/orders" element={<OrdersPage />} />
+            <Route path="/orders/:orderId" element={<OrderDetailPage />} />
             <Route path="/order-confirmation" element={<OrderConfirmationPage />} />
-            <Route path="/profile/orders" element={<OrdersPage />} />
           </Route>
         </Routes>
       </Box>

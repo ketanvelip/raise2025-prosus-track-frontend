@@ -7,11 +7,50 @@ import { UserContext } from '../context/UserContext';
 import ChatMessage from '../components/ChatMessage';
 import { motion, AnimatePresence } from 'framer-motion';
 import Groq from 'groq-sdk';
+import { runGroqConversation } from '../services/groqService';
+import axios from 'axios';
 
 const groq = new Groq({
   apiKey: process.env.REACT_APP_GROQ_API_KEY,
   dangerouslyAllowBrowser: true,
 });
+
+const tools = [
+  {
+    type: 'function',
+    function: {
+      name: 'get_recommendations',
+      description: "Get restaurant recommendations for a user based on their order history and an optional query.",
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: 'Optional: A specific query for recommendations, e.g., "something spicy" or "a cheap lunch near me".',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'generate_food_options',
+      description: 'Generates a list of food options based on a user query.',
+      parameters: {
+        type: 'object',
+        properties: {
+          input_text: {
+            type: 'string',
+            description: 'The user\'s query, e.g., "what kind of pizza is there?" or "show me some salads".',
+          },
+        },
+        required: ['input_text'],
+      },
+    },
+  },
+];
 
 const HomePage = ({ chatHistory, setChatHistory }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -31,30 +70,63 @@ const HomePage = ({ chatHistory, setChatHistory }) => {
   const handleSubmit = useCallback(async (query) => {
     if (!query.trim() || !user) return;
 
-    const newChatHistory = [...chatHistory, { sender: 'user', text: query }];
-    setChatHistory(newChatHistory);
+    const newMessages = [...chatHistory, { role: 'user', content: query }];
+    setChatHistory(newMessages);
     setIsChatView(true);
     setSearchTerm('');
     setIsProcessing(true);
 
     try {
-      const completion = await groq.chat.completions.create({
-        messages: [
-          { role: 'system', content: 'You are a helpful assistant for a food ordering app called PalateIQ.' },
-          ...newChatHistory.map(msg => ({ role: msg.sender === 'user' ? 'user' : 'assistant', content: msg.text }))
-        ],
-        model: 'llama3-8b-8192',
-      });
+      const responseMessage = await runGroqConversation(newMessages, user);
 
-      const aiResponse = completion.choices[0]?.message?.content || 'Sorry, I had trouble understanding that.';
-      setChatHistory(prev => [...prev, { sender: 'ai', text: aiResponse }]);
+      const historyWithTools = [...newMessages];
+      if (responseMessage.tool_calls) {
+        historyWithTools.push(responseMessage);
+        const finalResponse = await runGroqConversation(historyWithTools, user);
+        setChatHistory(prev => [...prev, finalResponse]);
+      } else {
+        setChatHistory(prev => [...prev, responseMessage]);
+      }
+
     } catch (e) {
       console.error('Error getting completion:', e);
-      setChatHistory(prev => [...prev, { sender: 'ai', text: 'Sorry, something went wrong. Please try again.' }]);
+      setChatHistory(prev => [...prev, { role: 'assistant', content: 'Sorry, something went wrong. Please try again.' }]);
+    } finally {
+      setIsProcessing(false);
     }
-
-    setIsProcessing(false);
   }, [user, chatHistory, setChatHistory]);
+
+  const handleOrder = useCallback((itemName) => {
+    const prompt = `Yes, please order the ${itemName}.`;
+    handleSubmit(prompt);
+  }, [handleSubmit]);
+
+  const get_recommendations = useCallback(async ({ query }) => {
+    if (!user || !user.user_id) return { error: 'User not logged in' };
+    try {
+      const response = await axios.get(`${process.env.REACT_APP_API_URL}/recommendations`, {
+        params: { user_id: user.user_id, query },
+      });
+      return response.data;
+    } catch (err) {
+      console.error('Error getting recommendations:', err);
+      return { error: 'Failed to fetch recommendations.' };
+    }
+  }, [user]);
+
+  const generate_food_options = useCallback(async ({ input_text }) => {
+    if (!user || !user.email) return { error: 'User not logged in' };
+    try {
+      const response = await axios.post(`${process.env.REACT_APP_API_URL}/generate_options`, {
+        email: user.email,
+        input_text,
+      });
+      return response.data;
+    } catch (err) {
+      console.error('Error generating food options:', err);
+      return { error: 'Failed to generate food options.' };
+    }
+  }, [user]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
@@ -77,13 +149,13 @@ const HomePage = ({ chatHistory, setChatHistory }) => {
 
     const dataArray = new Uint8Array(analyserRef.current.fftSize);
     analyserRef.current.getByteTimeDomainData(dataArray);
-    const isSilent = !dataArray.some(v => v > 128 + 2 || v < 128 - 2);
+    const isSilent = !dataArray.some(v => v > 128 + 5 || v < 128 - 5);
 
     if (isSilent) {
       if (!silenceTimerRef.current) {
         silenceTimerRef.current = setTimeout(() => {
           stopRecording();
-        }, 3000);
+        }, 1500);
       }
     } else if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
@@ -97,9 +169,11 @@ const HomePage = ({ chatHistory, setChatHistory }) => {
 
   const handleTranscription = useCallback(async () => {
     if (audioChunksRef.current.length === 0) {
-      setIsProcessing(false);
       return;
     }
+
+    setIsProcessing(true); // Set processing for the entire voice-to-response flow
+
     const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
     audioChunksRef.current = [];
     const file = new File([audioBlob], 'audio.webm', { type: 'audio/webm' });
@@ -109,39 +183,39 @@ const HomePage = ({ chatHistory, setChatHistory }) => {
         file: file,
         model: 'whisper-large-v3',
       });
-      const transcript = transcription.text;
-      if (transcript) {
-        handleSubmit(transcript);
-      } else {
-        setIsProcessing(false);
-      }
+      setSearchTerm(transcription.text);
+      await handleSubmit(transcription.text); // Await the full roundtrip
     } catch (e) {
-      console.error('Error transcribing audio:', e);
-      setIsProcessing(false);
+      console.error('Error during voice processing:', e);
+      setChatHistory(prev => [...prev, { sender: 'ai', text: 'Sorry, there was an error processing your voice message.' }]);
+      setIsProcessing(false); // Ensure processing is turned off on error
     }
-  }, [handleSubmit]);
+  }, [handleSubmit, setChatHistory]);
 
-  const startRecording = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      audioContextRef.current = new AudioContext();
-      const source = audioContextRef.current.createMediaStreamSource(stream);
-      analyserRef.current = audioContextRef.current.createAnalyser();
-      source.connect(analyserRef.current);
+  const startRecording = useCallback(() => {
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(stream => {
+        setIsChatView(true);
+        setIsRecording(true);
+        audioChunksRef.current = [];
+        mediaRecorderRef.current = new MediaRecorder(stream);
 
-      mediaRecorderRef.current = new MediaRecorder(stream);
-      mediaRecorderRef.current.ondataavailable = (event) => {
-        audioChunksRef.current.push(event.data);
-      };
-      mediaRecorderRef.current.onstop = handleTranscription;
-      mediaRecorderRef.current.start();
-      setIsRecording(true);
-      setIsProcessing(true);
-      requestAnimationFrame(checkForSilence);
-    } catch (err) {
-      console.error('Error accessing microphone:', err);
-      setIsProcessing(false);
-    }
+        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+        const source = audioContextRef.current.createMediaStreamSource(stream);
+        analyserRef.current = audioContextRef.current.createAnalyser();
+        analyserRef.current.fftSize = 2048;
+        source.connect(analyserRef.current);
+
+        mediaRecorderRef.current.ondataavailable = (event) => {
+          audioChunksRef.current.push(event.data);
+        };
+
+        mediaRecorderRef.current.onstop = handleTranscription;
+
+        mediaRecorderRef.current.start();
+        checkForSilence();
+      })
+      .catch(err => console.error('Error getting media device:', err));
   }, [checkForSilence, handleTranscription]);
 
   useEffect(() => {
@@ -202,7 +276,8 @@ const HomePage = ({ chatHistory, setChatHistory }) => {
                   )
                 }}
               />
-              {isProcessing && <Typography variant="body1" align="center" sx={{ mt: 2 }}>Thinking...</Typography>}
+              {isRecording && <Typography variant="body1" align="center" sx={{ mt: 2 }}>Listening...</Typography>}
+              {isProcessing && !isRecording && <Typography variant="body1" align="center" sx={{ mt: 2 }}>Thinking...</Typography>}
             </Box>
           </motion.div>
         ) : (
@@ -215,9 +290,10 @@ const HomePage = ({ chatHistory, setChatHistory }) => {
           >
             <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 2 }}>
               {chatHistory.map((msg, index) => (
-                <ChatMessage key={index} message={msg} />
+                <ChatMessage key={index} message={msg} onOrder={handleOrder} />
               ))}
-              {isProcessing && <ChatMessage message={{ sender: 'ai', text: 'Thinking...' }} />}
+              {isRecording && <ChatMessage message={{ sender: 'ai', text: 'Listening...' }} />}
+              {isProcessing && !isRecording && <ChatMessage message={{ sender: 'ai', text: 'Thinking...' }} />}
               {error && <ChatMessage message={{ sender: 'ai', text: `Sorry, something went wrong: ${error}` }} />}
               <div ref={chatEndRef} />
             </Box>

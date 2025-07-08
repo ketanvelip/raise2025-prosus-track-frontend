@@ -1,4 +1,9 @@
-# PalateIQ
+# Foundry Kitchen
+
+## Backend Repository
+
+- The backend for this project can be found at this [URL](https://github.com/ketanvelip/raise2025-prosus-track-backend)
+
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 

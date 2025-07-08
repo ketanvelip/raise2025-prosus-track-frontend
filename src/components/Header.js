@@ -53,16 +53,16 @@ const Header = ({ toggleSidebar }) => {
           <MenuIcon />
         </IconButton>
         <Typography variant="h6" component={Link} to="/" onClick={handleGoHome} sx={{ flexGrow: 1, textDecoration: 'none', color: 'inherit' }}>
-          PalateIQ
+          Foundry Kitchen
         </Typography>
         <Button color="inherit" component={Link} to="/" onClick={handleGoHome}>Home</Button>
-        <Button color="inherit" component={Link} to="/food">Food</Button>
-        <Button color="inherit" component={Link} to="/market">Market</Button>
-        <IconButton color="inherit" component={Link} to="/cart">
+        {user && <Button color="inherit" component={Link} to="/orders">Orders</Button>}
+        {/* <Button color="inherit" component={Link} to="/market">Market</Button> */}
+        {/* <IconButton color="inherit" component={Link} to="/cart">
           <Badge badgeContent={totalItems} color="secondary">
             <ShoppingCartIcon />
           </Badge>
-        </IconButton>
+        </IconButton> */}
         {user ? (
             <div>
               <IconButton

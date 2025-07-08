@@ -1,16 +1,18 @@
 import React, { useState, useContext } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import { Container, Typography, TextField, Button, Box, FormHelperText } from '@mui/material';
+import { Container, Typography, TextField, Button, Box, FormHelperText, CircularProgress } from '@mui/material';
 import { UserContext } from '../context/UserContext';
 
 const LoginPage = () => {
   const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
   const { login } = useContext(UserContext);
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    setLoading(true);
     if (email) {
       try {
         const username = email.split('@')[0];
@@ -24,6 +26,8 @@ const LoginPage = () => {
       } catch (error) {
         console.error('Login failed:', error);
         // Optionally, show an error message to the user
+      } finally {
+        setLoading(false);
       }
     }
   };
@@ -61,8 +65,9 @@ const LoginPage = () => {
             fullWidth
             variant="contained"
             sx={{ mt: 3, mb: 2 }}
+            disabled={loading}
           >
-            Enter
+            {loading ? <CircularProgress size={24} color="inherit" /> : 'Login'}
           </Button>
         </Box>
       </Box>
