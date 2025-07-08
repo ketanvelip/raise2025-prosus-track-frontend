@@ -1,5 +1,6 @@
 import React, { useContext, useState } from 'react';
 import { AppBar, Toolbar, Typography, Button, IconButton, Badge, Menu, MenuItem } from '@mui/material';
+import MenuIcon from '@mui/icons-material/Menu';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import AccountCircle from '@mui/icons-material/AccountCircle';
 import { useCart } from '../context/CartContext';
@@ -7,7 +8,7 @@ import { useOptions } from '../context/OptionsContext';
 import { UserContext } from '../context/UserContext';
 import { Link, useNavigate } from 'react-router-dom';
 
-const Header = () => {
+const Header = ({ toggleSidebar }) => {
   const { cartItems } = useCart();
   const { user, logout } = useContext(UserContext);
   const { clearOptions } = useOptions();
@@ -41,12 +42,21 @@ const Header = () => {
   return (
     <AppBar position="static" sx={{ background: 'linear-gradient(45deg, #212121 30%, #424242 90%)' }}>
       <Toolbar>
+        <IconButton
+          size="large"
+          edge="start"
+          color="inherit"
+          aria-label="menu"
+          sx={{ mr: 2 }}
+          onClick={toggleSidebar}
+        >
+          <MenuIcon />
+        </IconButton>
         <Typography variant="h6" component={Link} to="/" onClick={handleGoHome} sx={{ flexGrow: 1, textDecoration: 'none', color: 'inherit' }}>
-          AI E-Commerce
+          PalateIQ
         </Typography>
         <Button color="inherit" component={Link} to="/" onClick={handleGoHome}>Home</Button>
         <Button color="inherit" component={Link} to="/food">Food</Button>
-        {/* <Button color="inherit" component={Link} to="/travel">Travel</Button> */}
         <Button color="inherit" component={Link} to="/market">Market</Button>
         <IconButton color="inherit" component={Link} to="/cart">
           <Badge badgeContent={totalItems} color="secondary">

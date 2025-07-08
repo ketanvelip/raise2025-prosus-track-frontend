@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
@@ -22,6 +22,7 @@ import { OptionsProvider } from './context/OptionsContext';
 import LoginPage from './pages/LoginPage';
 import { useContext } from 'react';
 import Notification from './components/Notification';
+import Sidebar from './components/Sidebar';
 
 const ProtectedRoute = () => {
   const { user, loading } = useContext(UserContext);
@@ -38,6 +39,12 @@ const ProtectedRoute = () => {
 };
 
 function App() {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [chatHistory, setChatHistory] = useState([]);
+
+  const toggleSidebar = () => {
+    setSidebarOpen(!sidebarOpen);
+  };
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -48,12 +55,12 @@ function App() {
               <OptionsProvider>
                 <CartProvider>
                   <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-                    <Header />
+                    <Header toggleSidebar={toggleSidebar} />
                     <Box component="main" sx={{ flexGrow: 1 }}>
                       <Routes>
                         <Route path="/login" element={<LoginPage />} />
                         <Route element={<ProtectedRoute />}>
-                          <Route path="/" element={<HomePage />} />
+                          <Route path="/" element={<HomePage chatHistory={chatHistory} setChatHistory={setChatHistory} />} />
                           <Route path="/profile" element={<ProfilePage />} />
                           <Route path="/food" element={<FoodOrderingPage />} />
                           <Route path="/food/:restaurantId" element={<MenuPage />} />
@@ -65,6 +72,7 @@ function App() {
                         </Route>
                       </Routes>
                     </Box>
+                    <Sidebar open={sidebarOpen} onClose={toggleSidebar} chatHistory={chatHistory} />
                     <Footer />
                     <Notification />
                   </Box>

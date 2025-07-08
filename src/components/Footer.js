@@ -16,7 +16,7 @@ const Footer = () => {
       <Container maxWidth="lg">
         <Typography variant="body2" color="text.secondary" align="center">
           {'Copyright © '}
-          AI E-Commerce {new Date().getFullYear()}
+          PalateIQ {new Date().getFullYear()}
           {'.'}
         </Typography>
       </Container>

@@ -1,128 +1,221 @@
-import React, { useContext, useEffect, useRef } from 'react';
-import { Container, Typography, Box, IconButton, CircularProgress, Alert } from '@mui/material';
-import { motion } from 'framer-motion';
-import CloseIcon from '@mui/icons-material/Close';
+import React, { useState, useEffect, useContext, useRef, useCallback } from 'react';
+import { Container, Typography, Box, TextField, InputAdornment, IconButton, Paper } from '@mui/material';
 import MicIcon from '@mui/icons-material/Mic';
-import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
+import { useNavigate } from 'react-router-dom';
 import { useOptions } from '../context/OptionsContext';
 import { UserContext } from '../context/UserContext';
-import { useNavigate } from 'react-router-dom';
+import ChatMessage from '../components/ChatMessage';
+import { motion, AnimatePresence } from 'framer-motion';
+import Groq from 'groq-sdk';
 
-const HomePage = () => {
+const groq = new Groq({
+  apiKey: process.env.REACT_APP_GROQ_API_KEY,
+  dangerouslyAllowBrowser: true,
+});
+
+const HomePage = ({ chatHistory, setChatHistory }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isChatView, setIsChatView] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const { user } = useContext(UserContext);
-  const { options, loading, error, fetchOptions, clearOptions } = useOptions();
-  const { transcript, listening, resetTranscript, browserSupportsSpeechRecognition } = useSpeechRecognition();
-  const submittedRef = useRef(false);
+  const { options, loading, error, fetchOptions } = useOptions();
   const navigate = useNavigate();
+  const submittedRef = useRef(false);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const silenceTimerRef = useRef(null);
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+
+  const handleSubmit = useCallback((query) => {
+    if (query.trim() && user?.email && !submittedRef.current) {
+      submittedRef.current = true;
+      setChatHistory(prev => [...prev, { sender: 'user', text: query }]);
+      setIsChatView(true);
+      fetchOptions(user.email, query);
+      setSearchTerm('');
+    }
+  }, [user, fetchOptions, setChatHistory]);
+
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+        audioContextRef.current = null;
+      }
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
+    }
+    setIsRecording(false);
+  }, []);
+
+  const checkForSilence = useCallback(() => {
+    if (!analyserRef.current) return;
+
+    const dataArray = new Uint8Array(analyserRef.current.fftSize);
+    analyserRef.current.getByteTimeDomainData(dataArray);
+    const isSilent = !dataArray.some(v => v > 128 + 2 || v < 128 - 2);
+
+    if (isSilent) {
+      if (!silenceTimerRef.current) {
+        silenceTimerRef.current = setTimeout(() => {
+          stopRecording();
+        }, 3000);
+      }
+    } else if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+
+    if (mediaRecorderRef.current?.state === 'recording') {
+      requestAnimationFrame(checkForSilence);
+    }
+  }, [stopRecording]);
+
+  const handleTranscription = useCallback(async () => {
+    if (audioChunksRef.current.length === 0) return;
+    const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+    audioChunksRef.current = [];
+    const file = new File([audioBlob], 'audio.webm', { type: 'audio/webm' });
+
+    try {
+      const transcription = await groq.audio.transcriptions.create({
+        file: file,
+        model: 'whisper-large-v3',
+      });
+      const transcript = transcription.text;
+      if (transcript) {
+        setSearchTerm(transcript);
+        handleSubmit(transcript);
+      }
+    } catch (e) {
+      console.error('Error transcribing audio:', e);
+    }
+  }, [handleSubmit]);
+
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioContextRef.current = new AudioContext();
+      const source = audioContextRef.current.createMediaStreamSource(stream);
+      analyserRef.current = audioContextRef.current.createAnalyser();
+      source.connect(analyserRef.current);
+
+      mediaRecorderRef.current = new MediaRecorder(stream);
+      mediaRecorderRef.current.ondataavailable = (event) => {
+        audioChunksRef.current.push(event.data);
+      };
+      mediaRecorderRef.current.onstop = handleTranscription;
+      mediaRecorderRef.current.start();
+      setIsRecording(true);
+      requestAnimationFrame(checkForSilence);
+    } catch (err) {
+      console.error('Error accessing microphone:', err);
+    }
+  }, [checkForSilence, handleTranscription]);
 
   useEffect(() => {
     if (options) {
-      const path = `/${options.category}`;
-      navigate(path);
+      setChatHistory(prev => [...prev, { sender: 'ai', text: `Sure, I can help with ${options.category}. Let me show you some options.` }]);
+      setTimeout(() => navigate(`/${options.category}`), 2000);
     }
-  }, [options, navigate]);
-
-  
+  }, [options, navigate, setChatHistory]);
 
   const handleMicClick = () => {
-    if (listening) {
-      SpeechRecognition.stopListening();
+    if (isRecording) {
+      stopRecording();
     } else {
-      submittedRef.current = false; // Reset the flag when starting a new recognition
-      resetTranscript();
-      clearOptions();
-      SpeechRecognition.startListening({ continuous: true });
+      submittedRef.current = false;
+      startRecording();
     }
   };
 
-  useEffect(() => {
-    if (!listening && transcript && !submittedRef.current) {
-      submittedRef.current = true;
-      if (user?.email) {
-        fetchOptions(user.email, transcript);
-      } else {
-        console.error('Could not submit voice command: user email not found.');
-      }
+  const handleTextSubmit = (event) => {
+    if (event.key === 'Enter') {
+      handleSubmit(searchTerm);
     }
-  }, [listening, transcript, user, fetchOptions]);
-
-  if (!browserSupportsSpeechRecognition) {
-    return <Container><Alert severity="error">Your browser does not support speech recognition.</Alert></Container>;
-  }
-
-  const renderContent = () => {
-    if (listening) {
-      return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-          <motion.div
-            animate={{
-              scale: [1, 1.2, 1],
-              opacity: [0.7, 1, 0.7],
-            }}
-            transition={{
-              duration: 1.5,
-              ease: "easeInOut",
-              repeat: Infinity,
-            }}
-          >
-            <MicIcon sx={{ fontSize: 150, color: 'primary.main' }} />
-          </motion.div>
-          <Typography variant="h5" sx={{ mt: 2 }}>Listening...</Typography>
-          <Typography variant="body1" sx={{ mt: 2, minHeight: '24px' }}>{transcript}</Typography>
-          <IconButton onClick={handleMicClick} sx={{ mt: 4 }}>
-            <CloseIcon sx={{ fontSize: 40 }}/>
-          </IconButton>
-        </Box>
-      );
-    }
-
-    if (loading) {
-      return <CircularProgress sx={{ mt: 4 }} />;
-    }
-    if (error) {
-      return <Alert severity="error" sx={{ mt: 4 }}>{error}</Alert>;
-    }
-    return (
-      <>
-                <Typography variant="h2" component="h1" gutterBottom>
-          How can I help you?
-        </Typography>
-                <Box sx={{ my: 4 }}>
-          <IconButton
-            color="primary"
-            aria-label={'start listening'}
-            onClick={handleMicClick}
-            sx={{
-              width: 100,
-              height: 100,
-              border: '2px solid',
-              borderColor: 'grey.500',
-            }}
-          >
-            <MicIcon sx={{ fontSize: 60 }} />
-          </IconButton>
-        </Box>
-                <Typography variant="h5" color="text.secondary">
-          {'Click the mic to speak'}
-        </Typography>
-        <Typography variant="body1" sx={{ mt: 2, minHeight: '24px' }}>
-          {transcript}
-        </Typography>
-      </>
-    );
   };
 
   return (
-    <Container sx={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      py: 4,
-      minHeight: 'calc(100vh - 128px)',
-      textAlign: 'center'
-    }}>
-      {renderContent()}
+    <Container sx={{ height: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column' }}>
+      <AnimatePresence>
+        {!isChatView ? (
+          <motion.div
+            key="search"
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -50 }}
+            style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}
+          >
+            <Typography variant="h2" component="h1" align="center" gutterBottom>
+              Discover Your Next Favorite Meal
+            </Typography>
+            <Typography variant="h6" align="center" color="text.secondary" sx={{ mb: 4 }}>
+              Search by text or use your voice
+            </Typography>
+            <Box sx={{ my: 4, width: '100%', display: 'flex', justifyContent: 'center' }}>
+              <TextField 
+                fullWidth
+                variant="outlined"
+                placeholder="I'm looking for..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={handleTextSubmit}
+                sx={{ maxWidth: 700, bgcolor: 'background.paper', borderRadius: 1 }}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton onClick={handleMicClick} edge="end" color={isRecording ? 'primary' : 'default'}>
+                        <MicIcon />
+                      </IconButton>
+                    </InputAdornment>
+                  )
+                }}
+              />
+            </Box>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="chat"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', width: '100%' }}
+          >
+            <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 2 }}>
+              {chatHistory.map((msg, index) => (
+                <ChatMessage key={index} message={msg} />
+              ))}
+              {loading && <ChatMessage message={{ sender: 'ai', text: 'Thinking...' }} />}
+              {error && <ChatMessage message={{ sender: 'ai', text: `Sorry, something went wrong: ${error}` }} />}
+            </Box>
+            <Paper elevation={3} sx={{ p: 2, mt: 'auto' }}>
+              <TextField 
+                fullWidth
+                variant="outlined"
+                placeholder="I'm looking for..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={handleTextSubmit}
+                sx={{ bgcolor: 'background.paper', borderRadius: 1 }}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton onClick={handleMicClick} edge="end" color={isRecording ? 'primary' : 'default'}>
+                        <MicIcon />
+                      </IconButton>
+                    </InputAdornment>
+                  )
+                }}
+              />
+            </Paper>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </Container>
   );
 };
