@@ -1,4 +1,5 @@
 import React, { useState, useContext } from 'react';
+import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { Container, Typography, TextField, Button, Box, FormHelperText } from '@mui/material';
 import { UserContext } from '../context/UserContext';
@@ -8,11 +9,22 @@ const LoginPage = () => {
   const { login } = useContext(UserContext);
   const navigate = useNavigate();
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     if (email) {
-      login(email);
-      navigate('/');
+      try {
+        const username = email.split('@')[0];
+        // IMPORTANT: Replace this with your actual backend URL
+        const response = await axios.post(`${process.env.REACT_APP_API_URL}/users`, {
+          email,
+          username,
+        });
+        login(response.data); // Assuming the response contains the user object
+        navigate('/');
+      } catch (error) {
+        console.error('Login failed:', error);
+        // Optionally, show an error message to the user
+      }
     }
   };
 

@@ -29,7 +29,7 @@ const HomePage = ({ chatHistory, setChatHistory }) => {
   const chatEndRef = useRef(null);
 
   const handleSubmit = useCallback(async (query) => {
-    if (!query.trim() || !user?.email) return;
+    if (!query.trim() || !user) return;
 
     const newChatHistory = [...chatHistory, { sender: 'user', text: query }];
     setChatHistory(newChatHistory);

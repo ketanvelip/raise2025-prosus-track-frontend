@@ -1,5 +1,4 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import Cookies from 'js-cookie';
 
 export const UserContext = createContext();
 
@@ -10,26 +9,39 @@ export const UserProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const userEmail = Cookies.get('userEmail');
-    if (userEmail) {
-      setUser({ email: userEmail, walletBalance: 1500 }); // Mock wallet balance
+    try {
+      const savedUser = localStorage.getItem('user');
+      if (savedUser) {
+        const parsedUser = JSON.parse(savedUser);
+        // Ensure wallet balance exists, defaulting if not
+        if (typeof parsedUser.walletBalance === 'undefined') {
+          parsedUser.walletBalance = 1500;
+        }
+        setUser(parsedUser);
+      }
+    } catch (error) {
+      console.error("Failed to parse user from localStorage", error);
+      localStorage.removeItem('user');
     }
     setLoading(false);
   }, []);
 
-  const login = (email) => {
-    Cookies.set('userEmail', email, { expires: 7 });
-    setUser({ email, walletBalance: 1500 });
+  const login = (userData) => {
+    const userToStore = { ...userData, walletBalance: userData.walletBalance || 1500 };
+    localStorage.setItem('user', JSON.stringify(userToStore));
+    setUser(userToStore);
   };
 
   const logout = () => {
-    Cookies.remove('userEmail');
+    localStorage.removeItem('user');
     setUser(null);
   };
 
   const updateWalletBalance = (amount) => {
     if (user) {
-      setUser((prevUser) => ({ ...prevUser, walletBalance: prevUser.walletBalance - amount }));
+      const updatedUser = { ...user, walletBalance: user.walletBalance - amount };
+      setUser(updatedUser);
+      localStorage.setItem('user', JSON.stringify(updatedUser));
     }
   };
 
